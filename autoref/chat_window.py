@@ -5,38 +5,16 @@ import openai
 import os
 import gradio as gr
 from langchain.chat_models import ChatOpenAI
-from langchain.document_loaders import UnstructuredPDFLoader, OnlinePDFLoader
+from langchain.document_loaders import UnstructuredPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-# The vectorstore we'll be using
-from langchain.vectorstores import FAISS, Chroma
-
-# The LangChain component we'll use to get the documents
-from langchain.chains import RetrievalQA, ConversationalRetrievalChain, ChatVectorDBChain
-
-# The easy document loader for text
-from langchain.document_loaders import TextLoader
-
-# The embedding engine that will convert our text to vectors
+from langchain.vectorstores import FAISS
+from langchain.chains import ConversationalRetrievalChain
 from langchain.embeddings.openai import OpenAIEmbeddings
-
 from langchain.prompts.prompt import PromptTemplate
 from langchain.chains.question_answering import load_qa_chain
-
-# Chat specific components
-from langchain.memory import ConversationBufferMemory
-
-from langchain.prompts import (
-    ChatPromptTemplate,
-    PromptTemplate,
-    SystemMessagePromptTemplate,
-    AIMessagePromptTemplate,
-    HumanMessagePromptTemplate,
-)
-from langchain.schema import (
-    AIMessage,
-    HumanMessage,
-    SystemMessage
-)
+from langchain.memory import ConversationSummaryBufferMemory
+from langchain.chains.conversational_retrieval.prompts import CONDENSE_QUESTION_PROMPT, QA_PROMPT
+from langchain.prompts import PromptTemplate
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
@@ -81,16 +59,6 @@ def get_condense_prompt():
 
     return condense_question_prompt
 
-# llm = OpenAI(temperature=0, model_name="gpt-3.5-turbo")
-# question_generator = LLMChain(llm=llm, prompt=CONDENSE_QUESTION_PROMPT)
-# doc_chain=load_qa_chain(llm, chain_type="stuff", 
-# prompt=chat_prompt_template)
-
-# chain = ConversationalRetrievalChain(
-#     retriever=retriever,
-#     question_generator=question_generator,
-#     combine_docs_chain=doc_chain,
-# )
 
 def get_chain(vectorstore):
     # Build the model
@@ -98,34 +66,31 @@ def get_chain(vectorstore):
     condense_question_prompt = get_condense_prompt()
     QA = get_qa_prompt()
     llm = ChatOpenAI(temperature=0.3, model_name=model_version)
-    question_generator = LLMChain(llm=llm, prompt=condense_question_prompt)
+    question_generator = LLMChain(llm=llm,
+                                  prompt=condense_question_prompt)
     doc_chain = load_qa_chain(llm, chain_type="stuff", prompt=QA)
-
-    # Setup the memory system for the chatbot
-    memory = ConversationBufferMemory(memory_key="chat_history", 
-                                      ai_prefix="Autoref",
-                                      output_key="answer")
-
-    qa_chain = ConversationalRetrievalChain(
-        retriever=vectorstore.as_retriever(),
+    
+    memory = ConversationSummaryBufferMemory(
+        llm=llm,
+        output_key="answer",
+        memory_key="chat_history",
+        return_messages=True)
+    
+    retriever = vectorstore.as_retriever(
+        search_type="similarity",
+        search_kwars={"k": 4, "include_metadata": True})
+    
+    chain = ConversationalRetrievalChain(
         memory=memory,
-        # verbose=True,
-        # qa_prompt=QA,
+        retriever=retriever,
         question_generator=question_generator,
         combine_docs_chain=doc_chain,
+        return_source_documents=True,
+        get_chat_history=lambda h : h,
+        verbose=False
     )
 
-    # qa_chain = ChatVectorDBChain.from_llm(
-    #     llm=llm,
-    #     vectorstore=vectorstore,
-    #     # retriever=vectorstore.as_retriever(),
-    #     memory=memory,
-    #     # verbose=True,
-    #     qa_prompt=QA,
-    #     condense_question_prompt=condense_question_prompt,
-    # )
-
-    return qa_chain
+    return chain
 
 
 def load_data(document_path):
@@ -137,7 +102,7 @@ def load_data(document_path):
 
     # Load our data into embeddings
     embeddings = OpenAIEmbeddings()
-    db = FAISS.from_documents(texts, embeddings)#, persist_directory=".")
+    db = FAISS.from_documents(texts, embeddings)
 
     return db
 
@@ -167,18 +132,31 @@ def main():
             print("Updated chat history:", history)
             return gr.update(value=""), history
         
-        # msg.submit(user, [msg, chatbot], [msg, chatbot], queue=False)
-        # clear.click(lambda: None, None, chatbot, queue=False)
+        msg.submit(user, [msg, chatbot], [msg, chatbot], queue=False)
+        clear.click(lambda: None, None, chatbot, queue=False)
+        
+    demo.launch(debug=True)
+    # chat_history = []
+    # while True:
+    #     print("Your question:")
+    #     question = input()
+    #     result = qa_chain({"question": question, "chat_history": chat_history})
+    #     chat_history.append((question, result["answer"]))
+    #     print(f"AI: {result['answer']}")
 
     # chat_history = []
-    while True:
-        print("Your question:")
-        question = input()
-        result = qa_chain({"question": question, "chat_history": chat_history})
-        chat_history.append((question, result["answer"]))
-        print(f"AI: {result['answer']}")
+    # query = "What is the shape of the track?"
+    # result = qa_chain({"question": query, "chat_history": chat_history})
+    # print(f"Human: {query}")
+    # print(f"AI: {result['answer']}")
 
-    # demo.launch(debug=True)
+    # chat_history = [(query, result["answer"])]
+    # query = "What is the question I just asked you?"
+    # result = qa_chain({"question": query, "chat_history": chat_history})
+    # print(f"Human: {query}")
+    # print(f"AI: {result['answer']}")
+
+    # return 0
 
 if __name__ == "__main__":
     main()
