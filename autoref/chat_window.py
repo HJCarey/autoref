@@ -1,4 +1,3 @@
-
 import pickle
 from langchain import LLMChain
 import openai
@@ -106,6 +105,7 @@ def load_data(document_path):
 
     return db
 
+
 def main():
     # with open("vectors_roller_derby.pkl", "rb") as f:
     #     vectorstore = pickle.load(f)
@@ -136,34 +136,7 @@ def main():
         clear.click(lambda: None, None, chatbot, queue=False)
         
     demo.launch(debug=True)
-    # chat_history = []
-    # while True:
-    #     print("Your question:")
-    #     question = input()
-    #     result = qa_chain({"question": question, "chat_history": chat_history})
-    #     chat_history.append((question, result["answer"]))
-    #     print(f"AI: {result['answer']}")
 
-    # chat_history = []
-    # query = "What is the shape of the track?"
-    # result = qa_chain({"question": query, "chat_history": chat_history})
-    # print(f"Human: {query}")
-    # print(f"AI: {result['answer']}")
-
-    # chat_history = [(query, result["answer"])]
-    # query = "What is the question I just asked you?"
-    # result = qa_chain({"question": query, "chat_history": chat_history})
-    # print(f"Human: {query}")
-    # print(f"AI: {result['answer']}")
-
-    # return 0
 
 if __name__ == "__main__":
     main()
-
-    # while True:
-    #     print("Your question:")
-    #     question = input()
-    #     result = qa_chain({"question": question, "chat_history": chat_history})
-    #     chat_history.append((question, result["answer"]))
-    #     print(f"AI: {result['answer']}")
